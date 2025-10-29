@@ -306,35 +306,59 @@ class ExactSumConstraint(Constraint):
         self._var_min = {}
         self._var_is_negative = {}
 
-    def preProcess(self, variables: Sequence, domains: dict, constraints: list[tuple], vconstraints: dict): # noqa: D102
+    def preProcess(self, variables: Sequence, domains: dict, constraints: list[tuple], vconstraints: dict):  # noqa: D102
         Constraint.preProcess(self, variables, domains, constraints, vconstraints)
         multipliers = self._multipliers if self._multipliers else [1] * len(variables)
         exactsum = self._exactsum
-        self._var_min = { variable: min(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
-        self._var_max = { variable: max(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
-
-        # preprocess the domains to remove values that cannot contribute to the exact sum
+    
+        # Compute min/max values for each variable
+        self._var_min = {
+            variable: min(domains[variable]) * multiplier
+            for variable, multiplier in zip(variables, multipliers)
+        }
+        self._var_max = {
+            variable: max(domains[variable]) * multiplier
+            for variable, multiplier in zip(variables, multipliers)
+        }
+    
+        # --- Domain pruning phase ---
         for variable, multiplier in zip(variables, multipliers):
             domain = domains[variable]
             other_vars_min = sum_other_vars(variables, variable, self._var_min)
             other_vars_max = sum_other_vars(variables, variable, self._var_max)
-            for value in domain[:]:
-                if value * multiplier + other_vars_min > exactsum:
-                    domain.remove(value)
-                if value * multiplier + other_vars_max < exactsum:
-                    domain.remove(value)
-                    # Check for empty domain
+    
+            # Create a filtered copy instead of modifying in place
+            new_domain = [
+                value for value in domain
+                if not (
+                    value * multiplier + other_vars_min > exactsum or
+                    value * multiplier + other_vars_max < exactsum
+                )
+            ]
+    
+            # Check for empty domain
             if not new_domain:
                 raise ValueError(
                     f"No valid values remain for variable '{variable}' in ExactSumConstraint "
                     f"(original domain={domain}, exactsum={exactsum})"
                 )
-            
-        # recalculate the min and max after pruning
-        self._var_max = { variable: max(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
-        self._var_min = { variable: min(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
-        self._var_is_negative = { variable: self._var_min[variable] < 0 for variable in variables }
-        
+    
+            # Replace the domain with the filtered one
+            domains[variable] = new_domain
+    
+        # --- Recalculate min/max after pruning ---
+        self._var_min = {
+            variable: min(domains[variable]) * multiplier
+            for variable, multiplier in zip(variables, multipliers)
+        }
+        self._var_max = {
+            variable: max(domains[variable]) * multiplier
+            for variable, multiplier in zip(variables, multipliers)
+        }
+        self._var_is_negative = {
+            variable: self._var_min[variable] < 0 for variable in variables
+        }
+    
     def __call__(self, variables: Sequence, domains: dict, assignments: dict, forwardcheck=False):    # noqa: D102
         multipliers = self._multipliers
         exactsum = self._exactsum
