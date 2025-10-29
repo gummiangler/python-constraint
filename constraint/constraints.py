@@ -323,7 +323,13 @@ class ExactSumConstraint(Constraint):
                     domain.remove(value)
                 if value * multiplier + other_vars_max < exactsum:
                     domain.remove(value)
-
+                    # Check for empty domain
+            if not new_domain:
+                raise ValueError(
+                    f"No valid values remain for variable '{variable}' in ExactSumConstraint "
+                    f"(original domain={domain}, exactsum={exactsum})"
+                )
+            
         # recalculate the min and max after pruning
         self._var_max = { variable: max(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
         self._var_min = { variable: min(domains[variable]) * multiplier for variable, multiplier in zip(variables, multipliers) }   # noqa: E501
